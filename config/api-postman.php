@@ -118,7 +118,7 @@ return [
     |
     */
 
-        'extract_description_from_controller' => false,
+    'extract_description_from_controller' => false,
 
     /*
     |--------------------------------------------------------------------------
