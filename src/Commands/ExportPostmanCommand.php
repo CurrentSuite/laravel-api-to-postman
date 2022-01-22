@@ -5,8 +5,8 @@ namespace AndreasElia\PostmanGenerator\Commands;
 use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Contracts\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -18,7 +18,7 @@ use ReflectionFunction;
 class ExportPostmanCommand extends Command
 {
     /** @var string */
-    protected $signature = 'export:postman
+    protected $signature = 'export:postman 
                             {--bearer= : The bearer token to use on your endpoints}
                             {--basic= : The basic auth to use on your endpoints}';
 
@@ -116,13 +116,13 @@ class ExportPostmanCommand extends Command
 
                             $requestRules[] = [
                                 'name' => $fieldName,
-                                'description' => $printRules ? $rule : '',
+                                'description' => $printRules ? $rule ?? '' : '',
                             ];
 
                             if (is_array($rule) && in_array('confirmed', $rule)) {
                                 $requestRules[] = [
                                     'name' => $fieldName.'_confirmation',
-                                    'description' => $printRules ? $rule : '',
+                                    'description' => $printRules ? $rule ?? '' : '',
                                 ];
                             }
                         }
@@ -149,7 +149,11 @@ class ExportPostmanCommand extends Command
                     }
                 }
 
-                $request = $this->makeRequest($route, $method, $routeHeaders, $requestRules);
+                $requestDescription = $this->config['extract_description_from_controller']
+                    ? $this->extractDescriptionFromMethodDoc($reflectionMethod)
+                    : '';
+
+                $request = $this->makeRequest($route, $method, $routeHeaders, $requestRules, $requestDescription);
 
                 if ($this->isStructured()) {
                     $routeNames = $route->action['as'] ?? null;
@@ -168,16 +172,6 @@ class ExportPostmanCommand extends Command
                         return ! is_null($value) && $value !== '';
                     });
 
-                    if (! $this->createCrudFolders()) {
-                        if (in_array(end($routeNames), ['index', 'store', 'show', 'update', 'destroy'])) {
-                            unset($routeNames[array_key_last($routeNames)]);
-                        }
-
-                        if ($routeNames[0] == 'api') {
-                            unset($routeNames[0]);
-                        }
-                    }
-
                     $this->buildTree($this->structure, $routeNames, $request);
                 } else {
                     $this->structure['item'][] = $request;
@@ -185,9 +179,12 @@ class ExportPostmanCommand extends Command
             }
         }
 
-        Storage::disk($this->config['disk'])->put($exportName = "postman/$this->filename", json_encode($this->structure));
+        Storage::disk($this->config['disk'])->put(
+            $exportName = "postman/$this->filename",
+            json_encode($this->structure)
+        );
 
-        $this->info('Postman Collection Exported: '.storage_path('app/'.$exportName));
+        $this->info("Postman Collection Exported: $exportName");
     }
 
     protected function getReflectionMethod(array $routeAction): ?object
@@ -213,14 +210,11 @@ class ExportPostmanCommand extends Command
 
     public static function containsSerializedClosure(array $action): bool
     {
-        return is_string($action['uses']) && Str::startsWith($action['uses'], [
-            'C:32:"Opis\\Closure\\SerializableClosure',
-            'O:47:"Laravel\SerializableClosure\\SerializableClosure',
-            'O:55:"Laravel\\SerializableClosure\\UnsignedSerializableClosure',
-        ]);
+        return is_string($action['uses']) &&
+            Str::startsWith($action['uses'], 'C:32:"Opis\\Closure\\SerializableClosure') !== false;
     }
 
-    protected function buildTree(array &$routes, array $segments, array $request): void
+    protected function buildTree(array &$routes,array $segments,array $request): void
     {
         $parent = &$routes;
         $destination = end($segments);
@@ -258,10 +252,8 @@ class ExportPostmanCommand extends Command
         }
     }
 
-    public function makeRequest($route, $method, $routeHeaders, $requestRules)
+    public function makeRequest(Route $route, string $method, array $routeHeaders, array $requestRules, string $requestDescription)
     {
-        $printRules = $this->config['print_rules'];
-
         $uri = Str::of($route->uri())->replaceMatches('/{([[:alnum:]]+)}/', ':$1');
 
         $variables = $uri->matchAll('/(?<={)[[:alnum:]]+(?=})/m');
@@ -271,6 +263,7 @@ class ExportPostmanCommand extends Command
             'request' => [
                 'method' => strtoupper($method),
                 'header' => $routeHeaders,
+                'description' => $requestDescription,
                 'url' => [
                     'raw' => '{{base_url}}/'.$uri,
                     'host' => ['{{base_url}}'],
@@ -290,7 +283,7 @@ class ExportPostmanCommand extends Command
                     'key' => $rule['name'],
                     'value' => $this->config['formdata'][$rule['name']] ?? null,
                     'type' => 'text',
-                    'description' => $printRules ? $this->parseRulesIntoHumanReadable($rule['name'], $rule['description']) : '',
+                    'description' => $this->parseRulesIntoHumanReadable($rule['name'], $rule['description'] ?? []),
                 ];
             }
 
@@ -313,36 +306,25 @@ class ExportPostmanCommand extends Command
      */
     protected function parseRulesIntoHumanReadable($attribute, $rules): string
     {
-        // ... bail if user has asked for non interpreted strings:
         if (! $this->config['rules_to_human_readable']) {
-            foreach ($rules as $i => $rule) {
-                // because we don't support custom rule classes, we remove them from the rules
-                if (is_subclass_of($rule, Rule::class)) {
-                    unset($rules[$i]);
-                }
-            }
-
-            return is_array($rules) ? implode(', ', $rules) : $this->safelyStringifyClassBasedRule($rules);
+            return is_array($rules) ? implode(', ', $rules) : $rules->__toString();
         }
 
         /*
-         * An object based rule is presumably a Laravel default class based rule or one that implements the Illuminate
-         * Rule interface. Lets try to safely access the string representation...
+         * Handle Rule::class based rules:
          */
         if (is_object($rules)) {
-            $rules = [$this->safelyStringifyClassBasedRule($rules)];
+            try {
+                $rules = [$rules->__toString()];
+            } catch (\Exception $e) {
+                $rules = '';
+            }
         }
 
         /*
-         * Handle string based rules (e.g. required|string|max:30)
+         * Handle string based rules
          */
         if (is_array($rules)) {
-            foreach ($rules as $i => $rule) {
-                if (is_object($rule)) {
-                    unset($rules[$i]);
-                }
-            }
-
             $this->validator = Validator::make([], [$attribute => implode('|', $rules)]);
 
             foreach ($rules as $rule) {
@@ -360,7 +342,6 @@ class ExportPostmanCommand extends Command
             return implode(', ', is_array($messages) ? $messages : $messages->toArray());
         }
 
-        // ...safely return a safe value if we encounter neither a string or object based rule set:
         return '';
     }
 
@@ -378,30 +359,7 @@ class ExportPostmanCommand extends Command
                 'schema' => 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
             ],
             'item' => [],
-            'event' => [],
         ];
-
-        $prerequestPath = $this->config['prerequest_script'];
-        $testPath = $this->config['test_script'];
-
-        if ($prerequestPath || $testPath) {
-            $scripts = [
-                'prerequest' => $prerequestPath,
-                'test' => $testPath,
-            ];
-
-            foreach ($scripts as $type => $path) {
-                if (file_exists($path)) {
-                    $this->structure['event'][] = [
-                        'listen' => $type,
-                        'script' => [
-                            'type' => 'text/javascript',
-                            'exec' => file_get_contents($path),
-                        ],
-                    ];
-                }
-            }
-        }
 
         if ($this->token) {
             $this->structure['variable'][] = [
@@ -435,11 +393,6 @@ class ExportPostmanCommand extends Command
         return $this->config['structured'];
     }
 
-    protected function createCrudFolders()
-    {
-        return $this->config['crud_folders'];
-    }
-
     /**
      * Certain fields are not handled via the normal throw failure method in the validator
      * We need to add a human readable message.
@@ -463,18 +416,21 @@ class ExportPostmanCommand extends Command
         return $messages;
     }
 
-    /**
-     * In this case we have received what is most likely a Rule Object but are not certain.
-     *
-     * @param $probableRule
-     * @return string
-     */
-    protected function safelyStringifyClassBasedRule($probableRule): string
+    private function extractDescriptionFromMethodDoc($method) : string
     {
-        if (! is_object($probableRule) || is_subclass_of($probableRule, Rule::class) || ! method_exists($probableRule, '__toString')) {
-            return '';
-        }
+        // Retrieve the full PhpDoc comment block
+        $doc = $method->getDocComment();
 
-        return (string) $probableRule;
+        // Trim each line from space and star chars
+        $lines = array_map(function($line){
+            return trim($line, " *");
+        }, explode("\n", $doc));
+
+        // Retain lines that start with an @
+        $lines = array_filter($lines, function($line){
+            return strpos($line, "@") !== 0 && strpos($line, "/") !== 0;
+        });
+
+        return implode("\n ",$lines);
     }
 }
