@@ -40,17 +40,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Use Method Doc Tags to generate Request Description
-    |--------------------------------------------------------------------------
-    |
-    | Should we take the non @ text of the method docs to describe the methods?
-    |
-    */
-
-    'extract_description_from_controller' => false,
-
-    /*
-    |--------------------------------------------------------------------------
     | Auth Middleware
     |--------------------------------------------------------------------------
     |
@@ -118,6 +107,18 @@ return [
 
     'print_rules' => true, // @requires: 'enable_formdata' ===  true
     'rules_to_human_readable' => true, // @requires: 'parse_rules' ===  true
+
+    /*
+    |--------------------------------------------------------------------------
+    | Use Method Doc Tags to generate Request Description
+    |--------------------------------------------------------------------------
+    |
+    | Should we take the non @ text of the method docs to describe the requests
+    | within the generated collection?
+    |
+    */
+
+        'extract_description_from_controller' => false,
 
     /*
     |--------------------------------------------------------------------------
