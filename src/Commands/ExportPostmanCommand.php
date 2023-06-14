@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationRuleParser;
 use ReflectionClass;
 use ReflectionFunction;
+use ReflectionUnionType;
 
 class ExportPostmanCommand extends Command
 {
@@ -98,7 +99,15 @@ class ExportPostmanCommand extends Command
                         ->filter(function ($value, $key) {
                             $value = $value->getType();
 
+                            /** This is not ideal, but we need to handle Union Types in some way, so take the first type rule */
+                            if($value instanceof ReflectionUnionType)
+                            {
+                                $value = $value->getTypes()[0];
+                            }
+
                             return $value && is_subclass_of($value->getName(), FormRequest::class);
+
+
                         })
                         ->first();
 
@@ -211,7 +220,11 @@ class ExportPostmanCommand extends Command
     public static function containsSerializedClosure(array $action): bool
     {
         return is_string($action['uses']) &&
-            Str::startsWith($action['uses'], 'C:32:"Opis\\Closure\\SerializableClosure') !== false;
+            Str::startsWith($action['uses'], [
+                'C:32:"Opis\\Closure\\SerializableClosure',
+                'O:47:"Laravel\SerializableClosure\\SerializableClosure',
+                'O:55:"Laravel\\SerializableClosure\\UnsignedSerializableClosure',
+            ]);
     }
 
     protected function buildTree(array &$routes, array $segments, array $request): void
@@ -307,6 +320,13 @@ class ExportPostmanCommand extends Command
     protected function parseRulesIntoHumanReadable($attribute, $rules): string
     {
         if (! $this->config['rules_to_human_readable']) {
+            foreach ($rules as $i => $rule) {
+                // because we don't support custom rule classes, we remove them from the rules
+                if (is_subclass_of($rule, Rule::class)) {
+                    unset($rules[$i]);
+                }
+            }
+
             return is_array($rules) ? implode(', ', $rules) : $rules->__toString();
         }
 
@@ -325,6 +345,13 @@ class ExportPostmanCommand extends Command
          * Handle string based rules
          */
         if (is_array($rules)) {
+
+            foreach ($rules as $i => $rule) {
+                if (is_object($rule)) {
+                    unset($rules[$i]);
+                }
+            }
+
             $this->validator = Validator::make([], [$attribute => implode('|', $rules)]);
 
             foreach ($rules as $rule) {
@@ -359,7 +386,30 @@ class ExportPostmanCommand extends Command
                 'schema' => 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
             ],
             'item' => [],
+            'event' => [],
         ];
+
+        $prerequestPath = $this->config['prerequest_script'];
+        $testPath = $this->config['test_script'];
+
+        if ($prerequestPath || $testPath) {
+            $scripts = [
+                'prerequest' => $prerequestPath,
+                'test' => $testPath,
+            ];
+
+            foreach ($scripts as $type => $path) {
+                if (file_exists($path)) {
+                    $this->structure['event'][] = [
+                        'listen' => $type,
+                        'script' => [
+                            'type' => 'text/javascript',
+                            'exec' => file_get_contents($path),
+                        ],
+                    ];
+                }
+            }
+        }
 
         if ($this->token) {
             $this->structure['variable'][] = [
@@ -391,6 +441,11 @@ class ExportPostmanCommand extends Command
     protected function isStructured()
     {
         return $this->config['structured'];
+    }
+
+    protected function createCrudFolders()
+    {
+        return $this->config['crud_folders'];
     }
 
     /**
@@ -429,10 +484,10 @@ class ExportPostmanCommand extends Command
         // Retain lines that do not start with @ or / or simple empty and check for deprecation.
         $lines = array_filter($lines, function ($line) {
             return (
-                strpos($line, '@') !== 0 &&
-                strpos($line, '/') !== 0 &&
-                $line != "\r"
-            ) ||
+                    strpos($line, '@') !== 0 &&
+                    strpos($line, '/') !== 0 &&
+                    $line != "\r"
+                ) ||
                 strpos($line, '@deprecated') === 0 ||
                 strpos($line, '@expectedDeprecation') === 0;
         });
