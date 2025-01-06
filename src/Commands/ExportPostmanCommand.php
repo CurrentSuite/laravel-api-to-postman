@@ -113,6 +113,17 @@ class ExportPostmanCommand extends Command
 
                     if ($rulesParameter) {
                         $rulesParameter = $rulesParameter->getType()->getName();
+
+                        $class = new ReflectionClass($rulesParameter);
+
+                        if(!$class->isInstantiable()){
+                            $binds = \App::getBindings();
+                            /** @var Closure $concrete */
+                            $concrete = $binds[$rulesParameter]['concrete'];
+                            $closureReflection = new ReflectionFunction($concrete);
+                            $staticVariables = $closureReflection->getStaticVariables();
+                            $rulesParameter = $staticVariables['concrete'];
+                        }
                         $rulesParameter = new $rulesParameter;
                         $rules = method_exists($rulesParameter, 'rules') ? $rulesParameter->rules() : [];
 
