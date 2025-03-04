@@ -46,7 +46,7 @@ class ExportPostmanCommand extends Command
             ->export();
 
         Storage::disk(config('api-postman.disk'))
-            ->put('postman/'.$filename, $exporter->getOutput());
+            ->put('app/postman/' . $filename, $exporter->getOutput());
 
         $this->info('Postman Collection Exported: '.storage_path('app/postman/'.$filename));
     }
