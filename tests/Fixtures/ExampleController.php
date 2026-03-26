@@ -11,16 +11,33 @@ class ExampleController extends Controller
         return 'index';
     }
 
+    /**
+     * @deprecated
+     *
+     * @return string
+     */
     public function show(): string
     {
         return 'show';
     }
 
+    /**
+     * @expectedDeprecation
+     *
+     * @return string
+     */
     public function store(): string
     {
         return 'store';
     }
 
+    /**
+     * @note DO NOT REMOVE THIS BLOCK, IT IS USED IN TESTING.
+     * We want to extract this text and the next line
+     * This is the second line we are extracting to show it works multilines
+     *
+     * @return string
+     */
     public function delete(): string
     {
         return 'delete';
@@ -29,5 +46,35 @@ class ExampleController extends Controller
     public function showWithReflectionMethod(ExampleService $service): array
     {
         return $service->getRequestData();
+    }
+
+    /**
+     * @note DO NOT REMOVE THIS BLOCK, IT IS USED IN TESTING.
+     * We want to extract this text and nothing else.
+     *
+     * @param  ExampleFormRequest  $request
+     * @return string
+     */
+    public function storeWithFormRequest(ExampleFormRequest $request): string
+    {
+        return 'storeWithFormRequest';
+    }
+
+    public function getWithFormRequest(ExampleFormRequest $request): string
+    {
+        return 'getWithFormRequest';
+    }
+
+    /**
+     * This is the php doc route.
+     * Which is also multi-line.
+     *
+     * and has a blank line.
+     *
+     * @param  string  $non-existing  param
+     */
+    public function phpDocRoute(): string
+    {
+        return 'phpDocRoute';
     }
 }

@@ -31,9 +31,12 @@ return [
     |
     | If you want folders to be generated based on namespace.
     |
+    | Set "crud_folders" to "false" if you don't want the api, index, store, show etc. folders.
+    |
     */
 
     'structured' => false,
+    'crud_folders' => true,
 
     /*
     |--------------------------------------------------------------------------
@@ -70,6 +73,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Events
+    |--------------------------------------------------------------------------
+    |
+    | If you want to configure the prequest and test scripts for the collection,
+    | then please provide paths to the JavaScript files.
+    |
+    */
+
+    'prerequest_script' => '', // This script will execute before every request in the collection.
+    'test_script' => '', // This script will execute after every request in the collection.
+
+    /*
+    |--------------------------------------------------------------------------
+    | Include Doc Comments
+    |--------------------------------------------------------------------------
+    |
+    | Determines whether to set the PHP Doc comments to the description
+    | in postman.
+    |
+    */
+
+    'include_doc_comments' => false,
+
+    /*
+    |--------------------------------------------------------------------------
     | Enable Form Data
     |--------------------------------------------------------------------------
     |
@@ -78,6 +106,31 @@ return [
     */
 
     'enable_formdata' => false,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Parse Form Request Rules
+    |--------------------------------------------------------------------------
+    |
+    | If you want form requests to be printed in the field description field,
+    | and if so, whether they will be in a human readable form.
+    |
+    */
+
+    'print_rules' => true, // @requires: 'enable_formdata' ===  true
+    'rules_to_human_readable' => true, // @requires: 'parse_rules' ===  true
+
+    /*
+    |--------------------------------------------------------------------------
+    | Use Method Doc Tags to generate Request Description
+    |--------------------------------------------------------------------------
+    |
+    | Should we take the non @ text of the method docs to describe the requests
+    | within the generated collection?
+    |
+    */
+
+    'extract_description_from_controller' => false,
 
     /*
     |--------------------------------------------------------------------------
@@ -114,5 +167,33 @@ return [
     */
 
     'disk' => 'local',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    |
+    | Specify the authentication to be used for the endpoints.
+    |
+    */
+
+    'authentication' => [
+        'method' => env('POSTMAN_EXPORT_AUTH_METHOD'),
+        'token' => env('POSTMAN_EXPORT_AUTH_TOKEN'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Protocol Profile Behavior
+    |--------------------------------------------------------------------------
+    |
+    | Set of configurations used to alter the usual behavior of sending the request.
+    | These can be defined in a collection at Item or ItemGroup level which will be inherited if applicable.
+    |
+    */
+
+    'protocol_profile_behavior' => [
+        'disable_body_pruning' => false,  // Control request body pruning for following methods: GET, COPY, HEAD, PURGE, UNLOCK
+    ],
 
 ];
